@@ -129,6 +129,11 @@ class ImageGUI:
         cv_image_clean = cv_image.copy()
         rgb_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
         faces = self.detector.detect_faces(rgb_image)
+
+        # use skin segmentation to filter out any false positives from MTCNN
+        # not that there are errors but for science
+        skin_mask = self.skin_segmentation(cv_image)
+        faces = self.filter_by_skin(faces, skin_mask)
  
         img_h, img_w = cv_image.shape[:2]
         corners = [
@@ -194,6 +199,47 @@ class ImageGUI:
         aligned_face = cv2.warpAffine(
             cropped, transformation_matrix, (125, 125))
         return aligned_face
+    
+    # converts an image to hsv and creates a cleaned binary mask highlighting likely skin coloured regions using fixed threshes
+    def skin_segmentation(self, cv_image):
+        # convert to HSV since it separates colour from brightness, making skin detection more reliable
+        hsvimg = cv2.cvtColor(cv_image, cv2.COLOR_BGR2HSV)
+
+        # these HSV ranges cover most skin tones under normal lighting
+        skin_lower_bound = np.array([0, 20, 70], dtype=np.uint8)
+        skin_upper_bound = np.array([20, 255, 255], dtype=np.uint8)
+
+        # create binary mask where skin-like pixels are white
+        skin_mask = cv2.inRange(hsvimg, skin_lower_bound, skin_upper_bound)
+
+        # clean up the mask -> remove speckles then fill small holes
+        kernel = None
+        skin_mask = cv2.erode(skin_mask, kernel, iterations=2)
+        skin_mask = cv2.dilate(skin_mask, kernel, iterations=2)
+
+        return skin_mask
+
+    # filters detected faces by checking how much of each face region overlaps with the skin mask and keeps only those with enough skin presence
+    def filter_by_skin(self, faces, skin_mask):
+        filtered_faces = []
+
+        for detected_face in faces:
+            x,y,w,h = detected_face['box']
+
+            # crop the mask to just this face's bounding box
+            region_of_interest = skin_mask[y:y + h, x:x + w]
+
+            # check what fraction of the bounding box is skin coloured
+            skin_pixels = np.sum(region_of_interest > 0)
+            total_pixels = w*h
+            skin_ratio = skin_pixels / total_pixels
+
+            # if at least 10% of the box is skin, keep it
+            # tis a low threshold to avoid dropping real faces
+            if skin_ratio > 0.1:
+                filtered_faces.append(detected_face)
+
+        return filtered_faces
  
     def bulk_processing(self):
         folder_path = filedialog.askdirectory(title="Select Image Folder")
