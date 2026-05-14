@@ -101,7 +101,7 @@ class ImageGUI:
         self.image_label.image = photo
  
         # run the shared processing pipeline and display result
-        processed_img, faces = self.process_image(cv_image)
+        processed_img, faces, _ = self.process_image(cv_image)
  
         result_pil = Image.fromarray(
             cv2.cvtColor(processed_img, cv2.COLOR_BGR2RGB))
@@ -163,7 +163,7 @@ class ImageGUI:
             cv2.rectangle(cv_image, (cx, cy),
                           (cx+125, cy+125), (255, 255, 255), 2)
  
-        return cv_image, faces
+        return cv_image, faces, cv_image_clean # return also the clean image for 125x125s
  
     def similarity_transformation(self, face_data, source_image):
         # crop -> align -> resize to produce a 125x125 aligned face thumbnail
@@ -196,52 +196,46 @@ class ImageGUI:
         return aligned_face
  
     def bulk_processing(self):
-        # open folder selector, allow it to select an actual folder
         folder_path = filedialog.askdirectory(title="Select Image Folder")
         if not folder_path:
             return
         self.file_path = folder_path
- 
-        # create a folder for processed image in the same directory as that folder, or replace the pre-existing folder with an empty
-        processed_folder = os.path.join(folder_path, "Processed Images")
- 
+
+        # wipe and recreate the output folder (spec requires underscore, not space)
+        processed_folder = os.path.join(folder_path, "Processed_Images")
         if os.path.exists(processed_folder):
             shutil.rmtree(processed_folder)
         os.makedirs(processed_folder)
- 
-        # run a loop through each image in the folder:
+
         image_paths = glob.glob(os.path.join(folder_path, "*.jpg")) + \
-            glob.glob(os.path.join(folder_path, "*.jpeg")) + \
-            glob.glob(os.path.join(folder_path, "*.png")) + \
-            glob.glob(os.path.join(folder_path, "*.bmp"))
- 
+                    glob.glob(os.path.join(folder_path, "*.jpeg")) + \
+                    glob.glob(os.path.join(folder_path, "*.png")) + \
+                    glob.glob(os.path.join(folder_path, "*.bmp"))
+
+        start = time.time()
+        total_faces = 0
+        face_counter = 0 # global face count across all images for filename
+
         for image_path in image_paths:
             img = cv2.imread(image_path)
-            processed_img, faces = self.process_image(img)
- 
-            filename = os.path.basename(image_path)
-            save_path = os.path.join(processed_folder, filename)
-            cv2.imwrite(save_path, processed_img)
+            _, faces, clean_img = self.process_image(img) # 3 outputs, 
+            total_faces += len(faces) # counts faces
+
+            # save each cropped aligned face separately (no landmarks, just the clean 125x125)
+            for face in faces[:4]:
+                clean_face = self.similarity_transformation(face, clean_img) # changed from img for clean without landmarks (face crops)
+                save_path = os.path.join(processed_folder, f"Identity_0_face_{face_counter}.jpg") # saves
+                cv2.imwrite(save_path, clean_face)
+                face_counter += 1
+
+        elapsed = time.time() - start
+
+        # update GUI labels — identity count is 0 for now until clustering is added
+        self.time_label.configure(text=f"Processing Time: {elapsed:.2f}s")
+        self.faces_label.configure(text=f"Total {len(image_paths)} images processed in {elapsed:.2f}s. {total_faces} faces detected corresponding to 0 unique identities.")
  
  
 if __name__ == "__main__":
     root = tk.Tk()
     app = ImageGUI(root)
     root.mainloop()
- 
- 
-# TO DO
-# skin color segmentation
-# make it look better overall
-# report
-# mtcnn library attached for submission
-# processing time labeled for bulk processing
-# identifying faces and how many times a person was in all the images
-
-# from manar:
-# single image is is pretty much done i think
- 
-# and the bulk processing does the bounding boxes/detects features but doesn't count how many faces are of each person
- 
-# oh and I haven't done the colour segmentation stuff as well
- 
