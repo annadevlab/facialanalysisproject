@@ -13,3 +13,8 @@ and the bulk processing does the bounding boxes/detects features but doesn't cou
 
 i also used
 pip install ~~tkinter~~ pillow numpy opencv-python mtcnn tensorflow
+
+to do:
+-fix the one monica face (tuning? idk)
+-fix the numbering (identity_0_face_15) the 15 is obv wrong
+-add teh sface to the report and do it overall
