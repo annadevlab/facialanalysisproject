@@ -173,11 +173,11 @@ class ImageGUI:
         for i, face in enumerate(faces[:4]):
             aligned_face = self.similarity_transformation(face, cv_image_clean)
 
-            # landmark dots match 5-point ArcFace template positions 125x125
-            cv2.circle(aligned_face, (43, 58), 3, (0, 0, 255), -1)   # left eye
-            cv2.circle(aligned_face, (82, 57), 3,
+            # landmark dots at spec target positions
+            cv2.circle(aligned_face, (40, 40), 3, (0, 0, 255), -1)   # left eye
+            cv2.circle(aligned_face, (85, 40), 3,
                        (0, 255, 0), -1)   # right eye
-            cv2.circle(aligned_face, (63, 80), 3, (255, 0, 0), -1)   # nose
+            cv2.circle(aligned_face, (63, 70), 3, (255, 0, 0), -1)   # nose
 
             cx, cy = corners[i]
             cv_image[cy:cy+125, cx:cx+125] = aligned_face
@@ -195,8 +195,6 @@ class ImageGUI:
         left_eye = face_data['keypoints']['left_eye']
         right_eye = face_data['keypoints']['right_eye']
         nose = face_data['keypoints']['nose']
-        mouth_left = face_data['keypoints']['mouth_left']
-        mouth_right = face_data['keypoints']['mouth_right']
 
         # crop with padding to prevent black borders after warpAffine rotates crop
         x, y, w, h = face_data['box']
@@ -212,18 +210,14 @@ class ImageGUI:
         src_pts = np.array([
             [left_eye[0] - x1, left_eye[1] - y1],
             [right_eye[0] - x1, right_eye[1] - y1],
-            [nose[0] - x1, nose[1] - y1],
-            [mouth_left[0] - x1, mouth_left[1] - y1],
-            [mouth_right[0] - x1, mouth_right[1] - y1],
+            [nose[0] - x1, nose[1] - y1]
         ], dtype=np.float32)
 
-        # where the keypoints should be in the output
+        # where the keypoints should be in the output (spec: left eye (40,40), right eye (85,40), nose (63,70))
         dst_pts = np.array([
-            [42.73, 57.69],   # left eye
-            [82.06, 57.47],   # right eye
-            [62.53, 80.06],   # nose
-            [46.37, 103.07],  # mouth left
-            [78.93, 102.89],  # mouth right
+            [40.0,  40.0],   # left eye
+            [85.0,  40.0],   # right eye
+            [63.0,  70.0]   # nose
         ], dtype=np.float32)
 
         # apply transformation
