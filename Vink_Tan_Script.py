@@ -164,11 +164,11 @@ class ImageGUI:
         for i, face in enumerate(faces[:4]):
             aligned_face = self.similarity_transformation(face, cv_image_clean)
 
-            # landmark dots match the 5-point ArcFace template positions (scaled to 125x125)
-            cv2.circle(aligned_face, (43, 58), 3, (0, 0, 255), -1)   # left eye
-            cv2.circle(aligned_face, (82, 57), 3,
+            # landmark dots at spec target positions
+            cv2.circle(aligned_face, (40, 40), 3, (0, 0, 255), -1)   # left eye
+            cv2.circle(aligned_face, (85, 40), 3,
                        (0, 255, 0), -1)   # right eye
-            cv2.circle(aligned_face, (63, 80), 3, (255, 0, 0), -1)   # nose
+            cv2.circle(aligned_face, (63, 70), 3, (255, 0, 0), -1)   # nose
 
             cx, cy = corners[i]
             cv_image[cy:cy+125, cx:cx+125] = aligned_face
@@ -183,10 +183,6 @@ class ImageGUI:
 
         left_eye = face_data['keypoints']['left_eye']
         right_eye = face_data['keypoints']['right_eye']
-        nose = face_data['keypoints']['nose']
-        mouth_left = face_data['keypoints']['mouth_left']   # added
-        mouth_right = face_data['keypoints']['mouth_right'] # added
-
         # crop with padding to prevent black borders after warpAffine rotates crop
         x, y, w, h = face_data['box']
         img_h, img_w = source_image.shape[:2]
@@ -197,19 +193,14 @@ class ImageGUI:
         y2 = min(img_h, y + h + pad)
         cropped = source_image[y1:y2, x1:x2]
 
+        # 2-point similarity transform: exactly maps both eyes to their target positions
         src_pts = np.array([
             [left_eye[0] - x1, left_eye[1] - y1],
             [right_eye[0] - x1, right_eye[1] - y1],
-            [nose[0] - x1, nose[1] - y1],
-            [mouth_left[0] - x1, mouth_left[1] - y1],   # added
-            [mouth_right[0] - x1, mouth_right[1] - y1], # added
         ], dtype=np.float32)
         dst_pts = np.array([
-            [42.73, 57.69],   # left eye
-            [82.06, 57.47],   # right eye
-            [62.53, 80.06],   # nose
-            [46.37, 103.07],  # mouth left  (added)
-            [78.93, 102.89],  # mouth right (added)
+            [40.0, 40.0],   # left eye
+            [85.0, 40.0],   # right eye
         ], dtype=np.float32)
         transformation_matrix, _ = cv2.estimateAffinePartial2D(
             src_pts, dst_pts)
@@ -298,6 +289,10 @@ class ImageGUI:
             glob.glob(os.path.join(folder_path, "*.png")) + \
             glob.glob(os.path.join(folder_path, "*.bmp"))
 
+        self.faces_label.configure(
+            text=f"Processing {len(image_paths)} images...")
+        self.master.update()
+
         start = time.time()
         total_faces = 0
         all_faces = []
@@ -317,10 +312,13 @@ class ImageGUI:
         labels = self.cluster_identities(all_embeddings)
         n_identities = len(set(labels))
 
-        for i, (face_img, label) in enumerate(zip(all_faces, labels)):
+        identity_counters = {}
+        for face_img, label in zip(all_faces, labels):
+            count = identity_counters.get(label, 0)
             save_path = os.path.join(
-                processed_folder, f"Identity_{label}_face_{i}.jpg")
+                processed_folder, f"Identity_{label}_face_{count}.jpg")
             cv2.imwrite(save_path, face_img)
+            identity_counters[label] = count + 1
 
         elapsed = time.time() - start
 
