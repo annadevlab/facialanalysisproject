@@ -1,20 +1,29 @@
-# facialanalysisproject
-computer vision project
+# Face Detection and Matching
+Manar Vink (24025838), Anna Tan (24214464)
 
-TO DO
-- make it look better overall
-- report
-- mtcnn library attached for submission
-- identifying faces and how many times a person was in all the images
+## Setup
 
-from manar:
-single image is is pretty much done i think 
-and the bulk processing does the bounding boxes/detects features but doesn't count how many faces are of each person
+Install dependencies with:
+```
+pip install pillow numpy opencv-contrib-python mtcnn tensorflow
+```
 
-i also used
-pip install ~~tkinter~~ pillow numpy opencv-python mtcnn tensorflow
+Must use `opencv-contrib-python`**, not `opencv-python` — the contrib version includes the SFace recognition model. If `opencv-python` is already installed:
+```
+pip uninstall opencv-python
+pip install opencv-contrib-python
+```
 
-to do:
--fix the one monica face (tuning? idk)
--fix the numbering (identity_0_face_15) the 15 is obv wrong
--add teh sface to the report and do it overall
+PIL, numpy, cv2, and mtcnn must be installed before the program can be run
+
+## Required files
+
+Both files must be in the same folder:
+- `CITS4402_CVproject.py`
+- `face_recognition_sface_2021dec.onnx` — submitted with this project, but can also be downloaded from the [opencv/opencv_zoo](https://github.com/opencv/opencv_zoo) GitHub repository under `models/face_recognition_sface/`
+
+## Run
+
+```
+python CITS4402_CVproject.py
+```
