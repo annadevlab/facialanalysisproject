@@ -12,15 +12,15 @@ import time
 
 
 class ImageGUI:
-    # Base code for GUI taken from Lab03 starter guide
+    # base code for GUI taken from the Lab03 starter guide
 
     def __init__(self, master):
-        """Initialize the GUI and create all frames and buttons"""
+        # make GUI and make all frames and buttons
 
         self.master = master
         self.master.title("Feature Detection")
 
-        # initialize feature detector
+        # initialise feature detector
         self.detector = MTCNN()
 
         # load SFace model
@@ -77,7 +77,7 @@ class ImageGUI:
         self.faces_label.pack(side=tk.LEFT, padx=5)
 
     def single_image(self):
-        """Choose image to process, resize final image and display"""
+        # choose image to process, resize final img and display
 
         # open file picker, load image
         file_path = filedialog.askopenfilename(title="Select Image File", filetypes=[
@@ -135,7 +135,7 @@ class ImageGUI:
         self.faces_label.configure(text=f"Faces Found: {len(faces)}")
 
     def process_image(self, cv_image):
-        """Detect faces, draw landmarks and bounding boxes, paste aligned thumbnails in corners"""
+        # detect faces, draw landmarks and bounding boxes, paste aligned thumbnails in corners as needed
 
         # store clean image for unmarked pixels for face crops
         cv_image_clean = cv_image.copy()
@@ -173,11 +173,11 @@ class ImageGUI:
         for i, face in enumerate(faces[:4]):
             aligned_face = self.similarity_transformation(face, cv_image_clean)
 
-            # landmark dots at spec target positions
-            cv2.circle(aligned_face, (40, 40), 3, (0, 0, 255), -1)   # left eye
+            # landmark dots at spec target positions (adjusted)
+            cv2.circle(aligned_face, (40, 40), 3, (0, 0, 255), -1)  # left eye
             cv2.circle(aligned_face, (85, 40), 3,
-                       (0, 255, 0), -1)   # right eye
-            cv2.circle(aligned_face, (63, 70), 3, (255, 0, 0), -1)   # nose
+                       (0, 255, 0), -1)  # right eye
+            cv2.circle(aligned_face, (63, 70), 3, (255, 0, 0), -1)  # nose
 
             cx, cy = corners[i]
             cv_image[cy:cy+125, cx:cx+125] = aligned_face
@@ -188,8 +188,7 @@ class ImageGUI:
         return cv_image, faces, cv_image_clean
 
     def similarity_transformation(self, face_data, source_image):
-        """Crop, align, and resize thumbnails"""
-        # crop -> align -> resize to 125x125
+        # crop -> align -> resize to 125x125 (thumbnails)
 
         # extract MTCNN keypoints
         left_eye = face_data['keypoints']['left_eye']
@@ -228,7 +227,6 @@ class ImageGUI:
         return aligned_face
 
     def skin_filter(self, cv_image, faces):
-        """Process detected faces and return filtered list w/o false positives"""
         # return filtered list of faces (contains enough skin-coloured pixels)
 
         img_h, img_w = cv_image.shape[:2]
@@ -258,14 +256,14 @@ class ImageGUI:
         return filtered
 
     def extract_embedding(self, face_img):
-        """Resize aligned thumbnail to 112x112 BGR"""
+        # resize aligned thumbnail to 112x112 BGR
 
         # SFace needs 112x112 BGR, resize 125x125 aligned thumbnail
         face_112 = cv2.resize(face_img, (112, 112))
         return self.face_recognizer.feature(face_112).flatten()
 
     def cluster_identities(self, embeddings):
-        """Detect unique faces and cluster into identities"""
+        # to detect unique faces and cluster into identities
 
         # scale embedding vector to length 1, give cosine similarity between faces
         arr = np.array(embeddings, dtype=np.float32)
@@ -298,7 +296,7 @@ class ImageGUI:
         return labels
 
     def bulk_processing(self):
-        """Choose folder, process images, create a folder to store identities"""
+        # choose folder, process images, create a folder to store identities
 
         # open folder picker
         folder_path = filedialog.askdirectory(title="Select Image Folder")
