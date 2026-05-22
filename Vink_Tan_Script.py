@@ -15,29 +15,29 @@ class ImageGUI:
     # Base code for GUI taken from Lab03 starter guide
 
     def __init__(self, master):
-        # make GUI and initialise all frames and buttons
+        """Initialize the GUI and create all frames and buttons"""
 
         self.master = master
         self.master.title("Feature Detection")
 
-        # initialise MTCNN feature detector
+        # initialize feature detector
         self.detector = MTCNN()
 
         # load SFace model
-        # face_recognition_sface_2021dec.onnx must be in the same folder as this script
+        # face_recognition_sface_2021dec.onnx must be in the same folder as this script!!!
         _model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                    "face_recognition_sface_2021dec.onnx")
         self.face_recognizer = cv2.FaceRecognizerSF.create(_model_path, "")
 
-        # Create a border for the GUI
+        # create a border for the GUI
         self.border = tk.Frame(self.master, borderwidth=2, relief="groove")
         self.border.pack(expand=True, padx=10, pady=10)
 
-        # Image frame (top)
+        # image frame (top)
         self.images_frame = tk.Frame(self.border)
         self.images_frame.pack(side=tk.TOP)
 
-        # Control frame (bottom)
+        # control frame (bottom)
         self.controls_frame = tk.Frame(self.border)
         self.controls_frame.pack(side=tk.TOP, padx=10, pady=5)
 
@@ -77,7 +77,7 @@ class ImageGUI:
         self.faces_label.pack(side=tk.LEFT, padx=5)
 
     def single_image(self):
-        # choose image to process, resize final img and display
+        """Choose image to process, resize final image and display"""
 
         # open file picker, load image
         file_path = filedialog.askopenfilename(title="Select Image File", filetypes=[
@@ -110,9 +110,8 @@ class ImageGUI:
         self.image_label.configure(image=photo)
         self.image_label.image = photo
 
-        # run the processing pipeline and display result
+        # run the processing pipeline, resize, and display result
         processed_img, faces, _ = self.process_image(cv_image)
-
         result_pil = Image.fromarray(
             cv2.cvtColor(processed_img, cv2.COLOR_BGR2RGB))
         width, height = result_pil.size
@@ -136,18 +135,20 @@ class ImageGUI:
         self.faces_label.configure(text=f"Faces Found: {len(faces)}")
 
     def process_image(self, cv_image):
-        # detect faces, draw landmarks, paste aligned thumbnails into corners
+        """Detect faces, draw landmarks and bounding boxes, paste aligned thumbnails in corners"""
 
         # store clean image for unmarked pixels for face crops
         cv_image_clean = cv_image.copy()
+
+        # convert to RGB and fiter for confidence
         rgb_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
         faces = self.detector.detect_faces(rgb_image)
 
-        # filter for confidence then use skin filter to remove remaining false positives
+        # use a skin filter to remove false positives
         faces = [f for f in faces if f['confidence'] > 0.95]
         faces = self.skin_filter(cv_image, faces)
 
-        # define corner positions for thumbnail placement
+        # define corner positions
         img_h, img_w = cv_image.shape[:2]
         corners = [
             (0, 0),
@@ -172,25 +173,30 @@ class ImageGUI:
         for i, face in enumerate(faces[:4]):
             aligned_face = self.similarity_transformation(face, cv_image_clean)
 
-            # landmark dots at spec target positions
-            cv2.circle(aligned_face, (40, 40), 3, (0, 0, 255), -1)   # left eye
-            cv2.circle(aligned_face, (85, 40), 3,
+            # landmark dots match 5-point ArcFace template positions 125x125
+            cv2.circle(aligned_face, (43, 58), 3, (0, 0, 255), -1)   # left eye
+            cv2.circle(aligned_face, (82, 57), 3,
                        (0, 255, 0), -1)   # right eye
-            cv2.circle(aligned_face, (63, 70), 3, (255, 0, 0), -1)   # nose
+            cv2.circle(aligned_face, (63, 80), 3, (255, 0, 0), -1)   # nose
 
             cx, cy = corners[i]
             cv_image[cy:cy+125, cx:cx+125] = aligned_face
             cv2.rectangle(cv_image, (cx, cy),
                           (cx+125, cy+125), (255, 255, 255), 2)
 
-        # return also the clean image for 125x125s
+        # return clean image for 125x125s
         return cv_image, faces, cv_image_clean
 
     def similarity_transformation(self, face_data, source_image):
+        """Crop, align, and resize thumbnails"""
         # crop -> align -> resize to 125x125
 
+        # extract MTCNN keypoints
         left_eye = face_data['keypoints']['left_eye']
         right_eye = face_data['keypoints']['right_eye']
+        nose = face_data['keypoints']['nose']
+        mouth_left = face_data['keypoints']['mouth_left']
+        mouth_right = face_data['keypoints']['mouth_right']
 
         # crop with padding to prevent black borders after warpAffine rotates crop
         x, y, w, h = face_data['box']
@@ -202,15 +208,25 @@ class ImageGUI:
         y2 = min(img_h, y + h + pad)
         cropped = source_image[y1:y2, x1:x2]
 
-        # 2-point similarity transform: exactly maps both eyes to their target positions
+        # where the keypoints currently are in the cropped image
         src_pts = np.array([
             [left_eye[0] - x1, left_eye[1] - y1],
             [right_eye[0] - x1, right_eye[1] - y1],
+            [nose[0] - x1, nose[1] - y1],
+            [mouth_left[0] - x1, mouth_left[1] - y1],
+            [mouth_right[0] - x1, mouth_right[1] - y1],
         ], dtype=np.float32)
+
+        # where the keypoints should be in the output
         dst_pts = np.array([
-            [40.0, 40.0],   # left eye
-            [85.0, 40.0],   # right eye
+            [42.73, 57.69],   # left eye
+            [82.06, 57.47],   # right eye
+            [62.53, 80.06],   # nose
+            [46.37, 103.07],  # mouth left
+            [78.93, 102.89],  # mouth right
         ], dtype=np.float32)
+
+        # apply transformation
         transformation_matrix, _ = cv2.estimateAffinePartial2D(
             src_pts, dst_pts)
         aligned_face = cv2.warpAffine(
@@ -218,6 +234,7 @@ class ImageGUI:
         return aligned_face
 
     def skin_filter(self, cv_image, faces):
+        """Process detected faces and return filtered list w/o false positives"""
         # return filtered list of faces (contains enough skin-coloured pixels)
 
         img_h, img_w = cv_image.shape[:2]
@@ -242,19 +259,21 @@ class ImageGUI:
 
             # count what fraction of pixels pass threshold
             skin_ratio = np.sum(skin_mask > 0) / skin_mask.size
-
             if skin_ratio >= 0.15:
                 filtered.append(face)
-
         return filtered
 
     def extract_embedding(self, face_img):
+        """Resize aligned thumbnail to 112x112 BGR"""
+
         # SFace needs 112x112 BGR, resize 125x125 aligned thumbnail
         face_112 = cv2.resize(face_img, (112, 112))
         return self.face_recognizer.feature(face_112).flatten()
 
     def cluster_identities(self, embeddings):
-        # scale embedding vector to length 1, gives cosine similarity between faces
+        """Detect unique faces and cluster into identities"""
+
+        # scale embedding vector to length 1, give cosine similarity between faces
         arr = np.array(embeddings, dtype=np.float32)
         arr = arr / np.linalg.norm(arr, axis=1, keepdims=True)  # L2 normalise
         n = len(arr)
@@ -285,7 +304,7 @@ class ImageGUI:
         return labels
 
     def bulk_processing(self):
-        # choose folder, process images, create a folder to store identities
+        """Choose folder, process images, create a folder to store identities"""
 
         # open folder picker
         folder_path = filedialog.askdirectory(title="Select Image Folder")
@@ -293,7 +312,7 @@ class ImageGUI:
             return
         self.file_path = folder_path
 
-        # create Processed_Images subfolder (or clean it), collect all valid image paths via glob
+        # create Processed Images subfolder (or cleans it), collects all valid paths via glob
         processed_folder = os.path.join(folder_path, "Processed_Images")
         if os.path.exists(processed_folder):
             for f in glob.glob(os.path.join(processed_folder, "*.jpg")) + \
@@ -331,11 +350,11 @@ class ImageGUI:
                 all_embeddings.append(
                     self.extract_embedding(clean_face))
 
-        # send embeddings to cluster_identities and save thumbnails as labelled identities
+        # send embeddings to cluster_identities and save thumbnails as labeled identities
         labels = self.cluster_identities(all_embeddings)
         n_identities = len(set(labels))
 
-        # save each face crop under its identity label
+        # label identities
         identity_counters = {}
         for face_img, label in zip(all_faces, labels):
             count = identity_counters.get(label, 0)
