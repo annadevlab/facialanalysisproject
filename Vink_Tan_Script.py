@@ -15,10 +15,12 @@ class ImageGUI:
     # Base code for GUI taken from Lab03 starter guide
 
     def __init__(self, master):
+        # make GUI and initialise all frames and buttons
+
         self.master = master
         self.master.title("Feature Detection")
 
-        # Initialize detector
+        # initialise MTCNN feature detector
         self.detector = MTCNN()
 
         # load SFace model
@@ -75,6 +77,8 @@ class ImageGUI:
         self.faces_label.pack(side=tk.LEFT, padx=5)
 
     def single_image(self):
+        # choose image to process, resize final img and display
+
         # open file picker, load image
         file_path = filedialog.askopenfilename(title="Select Image File", filetypes=[
                                                ("Image Files", "*.png;*.jpg;*.jpeg;*.bmp;*.gif")])
@@ -82,6 +86,7 @@ class ImageGUI:
             return
         self.file_path = file_path
 
+        # start timer for processing time
         start = time.time()
 
         # load chosen image using PIL and convert to numpy array
@@ -105,7 +110,7 @@ class ImageGUI:
         self.image_label.configure(image=photo)
         self.image_label.image = photo
 
-        # run the  processing pipeline and display result
+        # run the processing pipeline and display result
         processed_img, faces, _ = self.process_image(cv_image)
 
         result_pil = Image.fromarray(
@@ -120,6 +125,7 @@ class ImageGUI:
             new_height = max_size
         result_pil = result_pil.resize((new_width, new_height))
 
+        # display processed photo
         processed_photo = ImageTk.PhotoImage(result_pil)
         self.result_label.configure(image=processed_photo)
         self.result_label.image = processed_photo
@@ -136,10 +142,12 @@ class ImageGUI:
         cv_image_clean = cv_image.copy()
         rgb_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
         faces = self.detector.detect_faces(rgb_image)
-        faces = [f for f in faces if f['confidence'] > 0.95]
 
+        # filter for confidence then use skin filter to remove remaining false positives
+        faces = [f for f in faces if f['confidence'] > 0.95]
         faces = self.skin_filter(cv_image, faces)
 
+        # define corner positions for thumbnail placement
         img_h, img_w = cv_image.shape[:2]
         corners = [
             (0, 0),
@@ -183,6 +191,7 @@ class ImageGUI:
 
         left_eye = face_data['keypoints']['left_eye']
         right_eye = face_data['keypoints']['right_eye']
+
         # crop with padding to prevent black borders after warpAffine rotates crop
         x, y, w, h = face_data['box']
         img_h, img_w = source_image.shape[:2]
@@ -225,10 +234,13 @@ class ImageGUI:
             if roi.size == 0:
                 continue
 
-            # convert to YCrCb and threshold for skintones
+            # convert to YCrCb and threshold for skintones (separate brightness from colour)
             ycrcb = cv2.cvtColor(roi, cv2.COLOR_BGR2YCrCb)
+
+            # threshold Cr and Cb for range of skin tones
             skin_mask = cv2.inRange(ycrcb, (0, 133, 77), (255, 173, 127))
 
+            # count what fraction of pixels pass threshold
             skin_ratio = np.sum(skin_mask > 0) / skin_mask.size
 
             if skin_ratio >= 0.15:
@@ -242,16 +254,20 @@ class ImageGUI:
         return self.face_recognizer.feature(face_112).flatten()
 
     def cluster_identities(self, embeddings):
+        # scale embedding vector to length 1, gives cosine similarity between faces
         arr = np.array(embeddings, dtype=np.float32)
         arr = arr / np.linalg.norm(arr, axis=1, keepdims=True)  # L2 normalise
         n = len(arr)
         if n == 1:
             return [0]
+
+        # build adjacency matrix, tune COSINE_THRESHOLD
         sim = arr @ arr.T
         COSINE_THRESHOLD = 0.48
         adj = sim > COSINE_THRESHOLD
         np.fill_diagonal(adj, False)
-        # BFS connected components: each component is one identity
+
+        # BFS connected components, each component is one identity
         labels = [-1] * n
         label = 0
         for start in range(n):
@@ -269,12 +285,15 @@ class ImageGUI:
         return labels
 
     def bulk_processing(self):
+        # choose folder, process images, create a folder to store identities
+
         # open folder picker
         folder_path = filedialog.askdirectory(title="Select Image Folder")
         if not folder_path:
             return
         self.file_path = folder_path
 
+        # create Processed_Images subfolder (or clean it), collect all valid image paths via glob
         processed_folder = os.path.join(folder_path, "Processed_Images")
         if os.path.exists(processed_folder):
             for f in glob.glob(os.path.join(processed_folder, "*.jpg")) + \
@@ -289,15 +308,18 @@ class ImageGUI:
             glob.glob(os.path.join(folder_path, "*.png")) + \
             glob.glob(os.path.join(folder_path, "*.bmp"))
 
+        # label to show currently processing
         self.faces_label.configure(
             text=f"Processing {len(image_paths)} images...")
         self.master.update()
 
+        # start timer for processing time readout
         start = time.time()
         total_faces = 0
         all_faces = []
         all_embeddings = []
 
+        # for each image run process_image, similarity_transformation again to get saved crops
         for image_path in image_paths:
             img = cv2.imread(image_path)
             _, faces, clean_img = self.process_image(img)
@@ -309,9 +331,11 @@ class ImageGUI:
                 all_embeddings.append(
                     self.extract_embedding(clean_face))
 
+        # send embeddings to cluster_identities and save thumbnails as labelled identities
         labels = self.cluster_identities(all_embeddings)
         n_identities = len(set(labels))
 
+        # save each face crop under its identity label
         identity_counters = {}
         for face_img, label in zip(all_faces, labels):
             count = identity_counters.get(label, 0)
@@ -322,6 +346,7 @@ class ImageGUI:
 
         elapsed = time.time() - start
 
+        # label for processing time and number of identities
         self.time_label.configure(text=f"Processing Time: {elapsed:.2f}s")
         self.faces_label.configure(
             text=f"Total {len(image_paths)} images processed in {elapsed:.2f}s. "
